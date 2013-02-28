@@ -1,0 +1,12 @@
+Revision history for Perl extension Net::SCTP.
+
+1.00  Thu Feb 28 2013
+	- Original release version
+	- sctp_send(), sctp_sendx(), sctp_sendv(), sctp_recvv() unsupported
+  - Currently setsockopt is not fully working. getsockopt is not implemented.
+  - sctp_peeloff has not been tested.
+  - getpeername, getsockname, and sctp_opt_info are also currently not implemented
+  - end(), recv(), sendto(), recvfrom(), read(), write(), and sctp_send() are
+  + not supported as of yet but may be in the future
+  - sctp_sendmsg and sctp_recvmsg do not currently have use of non
+  + mandatory parameters

@@ -1,0 +1,4 @@
+1) Add remaining SCTP functions to lib/Net/SCTP.pm
+2) Add support for all optional parameters
+3) Make setsockopt and getsockopt more robust
+
