@@ -13,8 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-
-
 package Net::SCTP;
 
 use 5.008008;
@@ -42,7 +40,7 @@ our @EXPORT = qw(
 
 );
 
-our $VERSION = '1.00';
+our $VERSION = '1.01';
 
 require XSLoader;
 XSLoader::load('Net::SCTP', $VERSION);
@@ -190,67 +188,57 @@ sub socket
 sub bind
 {
   my $self = shift;
+  my $local_host = defined($_[0]) ? $_[0] : $self->{LocalHost};
   my ($status, $check);
 
-  if(ref($self->{LocalHost}) eq "ARRAY")
+  if(ref($local_host) eq "ARRAY")
   {
-    if(@{$self->{LocalHost}} <= 1)
-    {
-      $self->{LocalHost} = shift @{$self->{LocalHost}};
-    }
-    else
-    {
-      print "Error: Tried to bind multiple ip addresses. Calling bindx\n";
-      return $self->sctp_bindx();
-    }
+    print STDERR "Error: Tried to bind multiple ip addresses. Try calling bindx instead.\n";
+    return -1;
   }
 
-  if(!defined($self->{AutoBind}))
+  if( defined($self->{AutoBind}) )
   {
-    # Get the ip version of LocalHost, the only thing we should be binding to
-    my $ip_version = $self->get_ip_version($self->{LocalHost});
+    print "If you want to use bind set AutoBind to undef\n";
+    return -1;
+  }
 
-    # Make sure the ip version of the socket matches what we got
-    if(defined($self->{IPV6}) && $ip_version != -1)
-    {
-      $check = "Match";
-    }
-    elsif(!defined($self->{IPV6}) && $ip_version == 0)
-    {
-      $check = "Match";
-    }
-    elsif($ip_version == -1)
-    {
-      $check = "Error: Bad IP";
-      print "IP passed in for LocalHost is incorrect.\n";
-    }
-    else
-    {
-      $check = "Error: No Match";
-      print "The IP you passed is v6 and the socket is set for only v4\n";
-    }
+  # Get the ip version of LocalHost, the only thing we should be binding to
+  my $ip_version = $self->get_ip_version($local_host);
 
-    $status = _bind($self->{Socket}, $self->{LocalPort},
-                                      $self->{LocalHost}, $ip_version);
-
-    #\Debug information
-    print "Debug: in bind()\n" if defined $self->{Debug};
-    print "\tDebug: Ip Check:\t$check\n" if defined $self->{Debug};
-    print "\tDebug: --Passing--\n" if defined $self->{Debug};
-    print "\tDebug: SD:\t\t$self->{Socket}\n" if defined $self->{Debug};
-    print "\tDebug: LocalPort:\t$self->{LocalPort}\n" if defined $self->{Debug};
-    print "\tDebug: LocalHost:\t$self->{LocalHost}\n" if defined $self->{Debug};
-    print "\tDebug: IPv:\t\t$ip_version\n" if defined $self->{Debug};
-    print "\tDebug: Status:\t\t$status\n\n" if defined $self->{Debug};
-    #/Debug information
-
-    return $status;
+  # Make sure the ip version of the socket matches what we got
+  if(defined($self->{IPV6}) && $ip_version != -1)
+  {
+    $check = "Match";
+  }
+  elsif(!defined($self->{IPV6}) && $ip_version == 0)
+  {
+    $check = "Match";
+  }
+  elsif($ip_version == -1)
+  {
+    $check = "Error: Bad IP";
+    print "IP passed in for LocalHost is incorrect.\n";
   }
   else
   {
-    print "If you want to use bind set AutoBind to undef\n";
-    $status = -1;
+    $check = "Error: No Match";
+    print "The IP you passed is v6 and the socket is set for only v4\n";
   }
+
+  $status = _bind($self->{Socket}, $self->{LocalPort}, $local_host, $ip_version);
+
+  #\Debug information
+  print "Debug: in bind()\n" if defined $self->{Debug};
+  print "\tDebug: Ip Check:\t$check\n" if defined $self->{Debug};
+  print "\tDebug: --Passing--\n" if defined $self->{Debug};
+  print "\tDebug: SD:\t\t$self->{Socket}\n" if defined $self->{Debug};
+  print "\tDebug: LocalPort:\t$self->{LocalPort}\n" if defined $self->{Debug};
+  print "\tDebug: LocalHost:\t$self->{LocalHost}\n" if defined $self->{Debug};
+  print "\tDebug: IPv:\t\t$ip_version\n" if defined $self->{Debug};
+  print "\tDebug: Status:\t\t$status\n\n" if defined $self->{Debug};
+  #/Debug information
+
   return $status;
 }
 
@@ -394,8 +382,8 @@ sub accept
 sub sctp_recvmsg
 {
   my $self           = shift;
-  my $flags          = defined($_[0]) ? $_[0] : 0;
-  my $buffer_size    = defined($_[1]) ? $_[1] : 4096;
+  my $buffer_size    = defined($_[0]) ? $_[0] : 4096;
+  my $flags          = defined($_[1]) ? $_[1] : 0;
   my $message        = "";
   my $message_length = 0;
   my $socket_desc    = 0;
@@ -624,26 +612,27 @@ sub sctp_connectx
 {
   my $self = shift;
   my @ip_version;
-  my $id = 0; # The id to set this association to
+  my $id = defined($_[0]) ? $_[0] : 0; # The id to set this association to
+  my $peer_host = defined($_[1]) ? $_[1] : $self->{PeerHost};
   my $i = 0;
   my $result;
   my @temp_array;
 
   # If they want to use connectx with a single Host we have to set PeerHost
   # to a scalar array reference.
-  if(ref($self->{PeerHost}) ne "ARRAY")
+  if(ref($peer_host) ne "ARRAY")
   {
-    push(@temp_array, $self->{PeerHost});
-    $self->{PeerHost} = \@temp_array;
+    push(@temp_array, $peer_host);
+    $peer_host = \@temp_array;
   }
   # Build the array of IP versions to be passed in
-  foreach (@{$self->{PeerHost}})
+  foreach (@{$peer_host})
   {
     push(@ip_version, $self->get_ip_version($_));
   }
 
   $result = _sctp_connectx($self->{Socket}, $self->{PeerPort},
-                           $self->{PeerHost}, \@ip_version, $id);
+                           $peer_host, \@ip_version, $id);
 
   #\Debug information
   if(defined($self->{Debug}))
@@ -653,7 +642,7 @@ sub sctp_connectx
     print "\tDebug: SD:\t\t$self->{Socket}\n";
     print "\tDebug: PeerPort:\t$self->{PeerPort}\n";
 
-    foreach (@{$self->{PeerHost}})
+    foreach (@{$peer_host})
     {
       print "\tDebug: PeerHost $i:\t$_\n";
       ++$i;
@@ -706,24 +695,24 @@ sub close
 #
 # Purpose           : Branch of an association into a separate socket
 # Parameters        : Class Socket, and id
-# Returns           : -1 on error, or the branched off association id
+# Returns           : -1 on error, or the branched off socket id
 #                     in $i_assoc_id
 # Note              : Currently Untested
 
 sub sctp_peeloff
 {
   my $self = shift;
-  my $i_assoc_id = 0; # The association id of the thing to be branched off
+  my $assoc_id = defined($_[0]) ? $_[0] : $self->{Socket}; # The association id of the thing to be branched off
   my $result;
 
-  $result =  _sctp_peeloff($self->{Socket}, $i_assoc_id);
+  $result =  _sctp_peeloff($self->{Socket}, $assoc_id);
 
   #\Debug information
   print "Debug: in sctp_peeloff()\n" if defined $self->{Debug};
   print "\tDebug: --Passing--\n" if defined $self->{Debug};
   print "\tDebug: Socket:\t\t$self->{Socket}\n" if defined $self->{Debug};
-  print "\tDebug: id:\t\t$i_assoc_id\n" if defined $self->{Debug};
-  print "\tDebug: Resulting id:\t$result\n" if defined $self->{Debug};
+  print "\tDebug: id:\t\t$assoc_id\n" if defined $self->{Debug};
+  print "\tDebug: Resulting id:\t$result\n\n" if defined $self->{Debug};
   #/Debug information
 
   return $result;
@@ -738,32 +727,32 @@ sub sctp_peeloff
 #
 # Purpose           : Shutdown the connection on the socket
 # Parameters        : How to and Class Socket
-# Returns           : The socket descriptor
+# Returns           : The destination socket descriptor
 # Note              : Used for TCP compatibility
-# $how_to           : 0 = Disables further receive operations
-#                     1 = Disables further sends, and starts SCTP shutdown
-#                     2 = Disables further send and receive operations
+# $how_to           : 1 = Disables further receive operations
+#                     2 = Disables further sends, and starts SCTP shutdown
+#                     3 = Disables further send and receive operations
 #                         and initiates the SCTP shutdown sequence.
 
 sub shutdown
 {
   my $self = shift;
-  my $how_to = defined($_[0]) ? $_[0] : 0;
-  if($how_to == 0)
+  my $how_to = defined($_[0]) ? $_[0] : 1;
+  if($how_to == 1)
   {
     $how_to = "SHUT_RD";
   }
-  elsif($how_to ==1)
+  elsif($how_to == 2)
   {
     $how_to = "SHUT_WR";
   }
-  elsif($how_to == 2)
+  elsif($how_to == 3)
   {
     $how_to = "SHUT_RDWR";
   }
   else
   {
-    print "Not a valid shutdown option. Setting to default of 0\n";
+    print "Not a valid shutdown option. Setting to default of 1\n";
     $how_to = "SHUT_RD";
   }
 
@@ -776,7 +765,7 @@ sub shutdown
   #/Debug information
 
   # Call the shutdown
-  _shutdown($self->{Socket}, $how_to);
+  _shutdown($self->{DestSocket}, $how_to);
 }
 
 #\End Subroutine    : shutdown
@@ -786,18 +775,47 @@ sub shutdown
 ##-----------------------------------------------------------------------------
 #/Start Subroutine  : getpeername
 #
-# Purpose           : Shutdown the connection on the socket
-# Parameters        : NYI
-# Returns           : NYI
-# Note              : NYI
+# Purpose           : Get the peer address on a one to one style socket
+# Parameters        : Destination Socket
+# Returns           : Ip address of the Destination Sockets peer
+# Note              : Mostly for Compatibility with TCP does not work
+#                     on one to many sockets. Called by the server
 
 sub getpeername
 {
   my $self = shift;
+  my $length;
+  my $peer_ip = q{};
 
+
+  $length = _getpeername($self->{DestSocket}, $peer_ip);
+  return ($peer_ip, $length);
 }
 
-#\End Subroutine    : shutdown
+#\End Subroutine    : getpeername
+##-----------------------------------------------------------------------------
+
+
+##-----------------------------------------------------------------------------
+#/Start Subroutine  : getsockname
+#
+# Purpose           : Get the peer address on a one to one style socket
+# Parameters        : Destination Socket
+# Returns           : Ip address of the Destination Sockets peer
+# Note              : Mostly for Compatibility with TCP does not work
+#                     on one to many sockets. Called by the server
+
+sub getsockname
+{
+  my $self = shift;
+  my $length;
+  my $local_ip = q{};
+
+  $length = _getsockname($self->{Socket}, $local_ip);
+  return ($local_ip, $length);
+}
+
+#\End Subroutine    : getsockname
 ##-----------------------------------------------------------------------------
 
 
@@ -819,6 +837,11 @@ sub sctp_getpadders
 
   $length = _sctp_getladdrs($self->{Socket}, $id, \@peer_ips, \@peer_ports, \@peer_ip_versions);
 
+  # We have to get ip version in the format that we use.
+  while($i <= @peer_ip_versions)
+  {
+    $peer_ip_versions[$i] -= 1;
+  }
   #\Debug information
   if(defined($self->{Debug}))
   {
@@ -861,6 +884,11 @@ sub sctp_getladders
 
   $length = _sctp_getladdrs($self->{Socket}, $id, \@local_ips, \@local_ports, \@local_ip_versions);
 
+  # We have to get ip version in the format that we use.
+  while($i <= @local_ip_versions)
+  {
+    $local_ip_versions[$i] -= 1;
+  }
   #\Debug information
   if(defined($self->{Debug}))
   {
@@ -1414,164 +1442,337 @@ Net::SCTP - An SCTP protocol module for Perl
 
 =head1 USE
 
-use Net::SCTP;
+  use Net::SCTP;
 
 =head1 REQUIRED INSTALL
 
 lksctp-tools
+lksctp-tools-devel
 
 =head1 DESCRIPTION
 
-An SCTP module created for Perl using XS.
+An SCTP (Stream Control Transport Protocol) module created for Perl using XS.
 
 We used the draft 11 of the SCTP architecture for this module. A link is
 listed in the SEE ALSO section.
 
-Tested on CentOS 5.2 with a i386 architecture using
+Tested on CentOS 5.2 with an i686 architecture using
 lksctp-tools-1.0.6-1.el5.1.i386 with IPv4.
 
-This module has not been tested with IPv6, although the features are available
+This module has not been tested with IPv6, although the features are available.
 
-=head1 CURRENT STATE
+=head2 CURRENT STATE
+
+=over 4
 
 Currently setsockopt is not fully working. getsockopt is not implemented.
-sctp_peeloff has not been tested. getpeername & getsockname
-are also currently not implemented. Finally we have no support
-for sctp_opt_info. Eventually all of these will be supported but for
+sctp_peeloff has not been tested. Finally we have no support
+for sctp_opt_info. Eventually all of these will be supported, but for
 now you should be able to work without them.
 
 Currently  send(), recv(), sendto(), recvfrom(),
-read(), write(), and sctp_send() are not supported but
+read(), write(), and sctp_send() are not supported; however,
 may eventually be supported.
 
 sctp_sendmsg & sctp_recvmsg do not currently support the
 use of parameters other than what you need to get them working.
 
-=head1 UNSUPPORTED
+=back
+
+=head2 UNSUPPORTED
+
+=over 4
 
 Although there may be some code for the following functions they
 have not been tested. Furthermore they were not supported in our
 version of lksctp-tools so we had no way to implement them.
 
 Functions:
+sctp_send, sctp_sendx, sctp_sendv, sctp_recvv
 
-sctp_send()
-sctp_sendx()
-sctp_sendv()
-sctp_recvv()
+=back
 
-=head1 SERVER EXAMPLE
+=head1 SAMPLE CODE
+
+=head2 SERVER EXAMPLE
+
+=over 4
 
 A server example can be seen in the directory with the program.
 One is also included here for good measure but the one in the
 directory is more extensive and has comments.
 
-use Net::SCTP;
+  use Net::SCTP;
 
-my $port    = 5556;
-my $message = 'I am the Server!!';
-my $listen  = 1;
-my $many    = 1;
-my $single_host = "192.168.25.41";
+  my $port    = 5556;
+  my $message = 'I am the Server!!';
+  my $listen  = 1;
+  my $many    = 1;
+  my $single_host = "xxx.xxx.xx.xx";
 
-my($client_message_length, $client_message, @hosts,
+  my($client_message_length, $client_message, @hosts,
       $sctp_server, $ipv6, $auto_bind);
 
-# Create the server with one host or multiple hosts.
+  # Create the server with one host or multiple hosts.
 
-if(!@hosts || @hosts <= 1)
-{
-  $single_host = shift @hosts if @hosts == 1;
-  @hosts = undef;
-  $sctp_server = Net::SCTP->new( {
+  if(!@hosts || @hosts <= 1)
+  {
+    $single_host = shift @hosts if @hosts == 1;
+    @hosts = undef;
+    $sctp_server = Net::SCTP->new( {
       LocalHost => $single_host,
       LocalPort => $port,
       Listen    => $listen,
       OneToMany => $many,
     } );
-}
-else
-{
-  $sctp_server = Net::SCTP->new( {
+  }
+  else
+  {
+    $sctp_server = Net::SCTP->new( {
       LocalHost => \@hosts,
       LocalPort => $port,
       Listen    => $listen,
       OneToMany => $many,
     } );
-}
+  }
 
-$sctp_server->start_server();
+  $sctp_server->start_server();
 
-while($sctp_server->{Socket})
-{
-  $sctp_server->accept() if ! $many;
+  while($sctp_server->{Socket})
+  {
+    $sctp_server->accept() if ! $many;
 
-  ($client_message, $client_message_length) = $sctp_server->sctp_recvmsg();
+    ($client_message, $client_message_length) = $sctp_server->sctp_recvmsg();
 
-  print "\n" . $sctp_server->get_PeerHost();
-  print  ":" . $sctp_server->get_PeerPort() . "\n";
-  print "Receiving Message: $client_message\n";
-  print "Size of: $client_message_length\n";
+    print "\n" . $sctp_server->get_PeerHost();
+    print  ":" . $sctp_server->get_PeerPort() . "\n";
+    print "Receiving Message: $client_message\n";
+    print "Size of: $client_message_length\n";
 
-  $sctp_server->sctp_sendmsg( $message );
-}
+    $sctp_server->sctp_sendmsg( $message );
+  }
 
-$sctp_server->close();
-exit 1;
+  $sctp_server->close();
 
+=back
 
-=head1 CLIENT EXAMPLE
+=head2 CLIENT EXAMPLE
+
+=over 4
 
 A client example can be seen in the directory with the program.
 One is also included here for good measure but the one in the
 directory is more extensive and has comments.
 
-use Net::SCTP;
+  use Net::SCTP;
 
 
-my $single_host = "192.168.25.41";
-my $dest_port = 5556;
-my $message   = "I am the Client!!";
-my $listen    = 1;
-my $many      = 1;
+  my $single_host = "xxx.xxx.xx.xx";
+  my $dest_port = 5556;
+  my $message   = "I am the Client!!";
+  my $listen    = 1;
+  my $many      = 1;
 
-my (@hosts, $message_length, $sctp_client);
+  my (@hosts, $message_length, $sctp_client);
 
-# Whether we have multiple hosts to connect to or one
-if(!@hosts || @hosts <= 1)
-{
-  $single_host = shift @hosts if @hosts == 1;
-  $sctp_client = Net::SCTP->new( {
+  # Whether we have multiple hosts to connect to or one
+  if(!@hosts || @hosts <= 1)
+  {
+    $single_host = shift @hosts if @hosts == 1;
+    $sctp_client = Net::SCTP->new( {
       PeerHost  => $single_host,
       PeerPort  => $dest_port,
       Listen    => $listen,
       OneToMany => $many,
     } );
-}
-else
-{
-  $sctp_client = Net::SCTP->new( {
+  }
+  else
+  {
+    $sctp_client = Net::SCTP->new( {
       PeerHost  => \@hosts,
       PeerPort  => $dest_port,
       Listen    => $listen,
       OneToMany => $many,
     } );
-}
+  }
 
-$sctp_client->start_client();
-
-
-$sctp_client->sctp_sendmsg( $message );
+  $sctp_client->start_client();
 
 
-($message, $message_length)  = $sctp_client->sctp_recvmsg();
+  $sctp_client->sctp_sendmsg( $message );
 
 
-print "Received message: $message\n";
-print "Size of: $message_length\n";
+  ($message, $message_length)  = $sctp_client->sctp_recvmsg();
 
-$sctp_client->close();
-exit 1;
+
+  print "Received message: $message\n";
+  print "Size of: $message_length\n";
+
+  $sctp_client->close();
+
+=back
+
+=head1 CONSTRUCTOR
+
+=over 4
+
+=item new ( \%ARGS )
+
+Creates a new Net::SCTP object.  Net::SCTP provides the following key-value pairs:
+
+  LocalHost     Local host bind address
+  LocalPort     Local host bind port
+  PeerHost      Remote host address
+  PeerPort      Remote port or service
+  Listen        Set to 1 to accept new connections
+  OneToMany     true for one-to-many and false one-to-one style connections
+  Debug         true will print debug info
+  IPV6          true for an IPv6 network, defaults to false
+
+=back
+
+=head2 METHODS
+
+=over 4
+
+=item socket ()
+
+Sets up a socket descriptor.
+
+=item bind ( $peer_host )
+
+Bind a server to a single IPv4 or IPv6 address.
+The $peer_host parameter is optional if the user provides
+a PeerHost in the new() function.
+
+=item connect ( $peer_host )
+
+Connect to a single host. Connect can be called multiple
+times to create multiple connections on the same socket.
+If called before bind the server will automatically bind
+to what it needs if using listen.
+
+The $peer_host parameter is optional if the user provides
+a PeerHost in the new() function.
+
+=item listen ()
+
+By default, new associations are not accepted for one-to-many style
+sockets.  An application uses listen() to mark a socket as being able
+to accept new associations. For one-to-one connection types
+you will need to use accept() instead.
+
+=item accept ()
+
+Removes an established SCTP association from the accept queue of
+the endpoint.  A new socket descriptor will be returned from
+accept() to represent the newly formed association.
+
+=item ($message, $message_length) = sctp_recvmsg ( $buffer_size, $flags )
+
+Returns SCTP messages it receives and as a second parameter returns the message length.
+If the length of the message received is greater than $buffer_size, the message will
+be "chunked".  This means that the received message will be broken up into several smaller
+messages with the length of each message being at most the $buffer_size.
+
+=item sctp_sendmsg ( $message )
+
+Send a message on an open connection.
+
+=item bindx ( \@local_addresses, $flag )
+
+Pass an array reference to bind to multiple IPv4 or IPv6 addresses.
+If you provide this array reference to the LocalHost in the new() function, this parameter is optional.
+
+=item sctp_connectx ( \@peer_host )
+
+Optionally pass an array reference to bind to connect to multiple IPv4 or IPv6 peer addresses.
+If you provide this array reference to the PeerHost in the new() function, this parameter is optional.
+
+=item close ()
+
+Close the connection on a socket.
+
+=item sctp_peeloff ()
+
+Branch an association into a seperate socket.
+
+=item shutdown ()
+
+Shutdown the connection on the socket.
+
+=item sctp_getpadders ()
+
+Get the peer address you are connected to.
+
+=item sctp_getladders ()
+
+Get the local address you are connected to.
+
+=item setsockopt ( \%hash )
+
+Set the options for a socket.  This function takes a hash of hashes.  The keys for the
+inner hash are the enumeration text for each socket option and the keys within those
+inner hashes are the variables for the respective struct.  This function allows users
+to set multiple socket options in a single function call.  It not necessary to provide
+the variables that you do not want to set.
+
+**Note: Not all of the socket options have been implemented at this point.
+
+=over 4
+
+Example:
+
+  $sctp_object->setsockopt( {
+    SCTP_EVENTS => {
+        sctp_data_io_event => 1,
+        sctp_association_event => 1,
+        sctp_authentication_event => 0
+      }
+    },
+    SCTP_RTOINFO => {
+      srto_initial => 5,
+    },
+  );
+
+=item getsockopt ()
+
+Returns a hash of socket options similar to format described above in setsockopt.
+
+=item start_server ()
+
+Performs server style start up for SCTP.  This function is simply provided for
+convenience, you do not need to call this function to create an SCTP server.
+
+=item start_client ()
+
+Performs client style start up for SCTP.  This function is simply provided for
+convenience, you do not need to call this function to create an SCTP client.
+
+=item ($peer_ip , $peer_length) = getpeername ()
+
+Query a socket descriptor for a peer address. This function is
+invoked by the server and will return the address and the length
+of the address for use.
+
+This function will only work with one to one style sockets and is mostly for
+compatibility with older socket types like TCP. Use sctp_getpadders() for
+one to many type sockets.
+
+The $peer_host parameter is optional if the user provides
+a PeerHost in the new() function.
+
+=item ($local_ip , $local_length) = getsockname ()
+
+Query a socket descriptor for a server address. This function is
+invoked by the peer and will return the address and the length
+of the address for use.
+
+This function will only work with one to one style sockets and is mostly for
+compatibility with older socket types like TCP. Use sctp_getladders() for
+one to many type sockets.
+
+=back
 
 =head1 SEE ALSO
 

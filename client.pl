@@ -22,11 +22,11 @@ use Net::SCTP;
 # These are parameters that have defaults but that can also be overridden
 # by passing in things when calling the script
 ################################################################################
-my $single_host = "192.168.25.41";
-my $dest_port = 5556;
-my $message   = "I am the Client!!";
-my $listen    = 1;
-my $many      = 1;
+my $single_host = "127.0.0.1";
+my $dest_port   = 5556;
+my $message     = "I am the Client!!";
+my $listen      = 1;
+my $many        = 1;
 
 ################################################################################
 # Variables that are declared here will be used and defined later.
@@ -79,8 +79,6 @@ else
 # socket(), setsocketopt(), and connect()
 ################################################################################
 $sctp_client->start_client();
-
-$sctp_client->sctp_getpadders();
 
 ################################################################################
 # Send a message $message using the details that we specified for our client

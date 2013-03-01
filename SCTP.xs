@@ -487,7 +487,9 @@ int
 _close(i_sd)
     int i_sd
   CODE:
-    close(i_sd);
+    RETVAL = close(i_sd);
+  OUTPUT:
+    RETVAL
 
 #\End Subroutine    : _close
 ##-----------------------------------------------------------------------------
@@ -498,17 +500,36 @@ _close(i_sd)
 #
 # Purpose           : close the connection on a socket
 # i_sd              : The socket descriptor to bind to.
-# i_how             : 0 = Disables further receive operations
-#                     1 = Disables further sends, and starts SCTP shutdown
-#                     2 = Disables further send and receive operations
+# i_how             : 1 = Disables further receive operations
+#                     2 = Disables further sends, and starts SCTP shutdown
+#                     3 = Disables further send and receive operations
 #                         and initiates the SCTP shutdown sequence.
 
 int
-_shutdown( i_sd, i_how )
+_shutdown( i_sd, sz_how )
     int i_sd
-    char* i_how
+    char* sz_how
   CODE:
-    RETVAL = shutdown( i_sd, i_how );
+    if(sz_how == 'SHUT_RDWR')
+    {
+      RETVAL = shutdown( i_sd, SHUT_RDWR );
+    }
+    else if(sz_how == 'SHUT_WR')
+    {
+      RETVAL = shutdown( i_sd, SHUT_WR );
+    }
+    else
+    {
+      RETVAL = shutdown( i_sd, SHUT_RD );
+    }
+
+    if( RETVAL < 0 )
+    {
+      printf("After shutdown errno: %d\n", errno);
+      perror("Description: ");
+    }
+  OUTPUT:
+    RETVAL
 
 #\End Subroutine    : _shutdown
 ##-----------------------------------------------------------------------------
@@ -518,21 +539,24 @@ _shutdown( i_sd, i_how )
 #/Start Subroutine  : _getpeername
 #
 # Purpose           : Get the socket of a peer on a one to one style socket
-# i_sd              : The socket descriptor the peer is bound to
+# i_sd              : The socket descriptor of the peer
 # sz_ip             : The ip address that will be filled out on return
-# i_len             : The size of the ip address filled on return
+# i_len             : The size of the ip address that is returned
 # Note              : Does not work on one to many style sockets
-#                     Currently in a non-working state
 
 int
-_getpeername(i_sd, sz_ip, i_len)
+_getpeername(i_sd, sz_ip)
     int i_sd
     char* sz_ip
-    int i_len
   PREINIT:
-    struct sockaddr t_addr = {0};
+    struct sockaddr_in t_addr = {0};
+    int i_len;
   CODE:
-    RETVAL = getpeername( i_sd, &t_addr,(void*) sizeof(struct sockaddr) );
+    getpeername( i_sd, &t_addr, &i_len );
+    RETVAL = i_len;
+
+    sz_ip = (char*)(inet_ntoa(t_addr.sin_addr));
+
 
     if( RETVAL < 0 )
     {
@@ -540,9 +564,46 @@ _getpeername(i_sd, sz_ip, i_len)
       perror("Description: ");
     }
   OUTPUT:
+    sz_ip
     RETVAL
 
 #\End Subroutine    : _getpeername
+##-----------------------------------------------------------------------------
+
+
+##-----------------------------------------------------------------------------
+#/Start Subroutine  : _getsockname
+#
+# Purpose           : Get the socket of a peer on a one to one style socket
+# i_sd              : The socket descriptor of the peer
+# sz_ip             : The ip address that will be filled out on return
+# i_len             : The size of the ip address that is returned
+# Note              : Does not work on one to many style sockets
+
+int
+_getsockname(i_sd, sz_ip)
+    int i_sd
+    char* sz_ip
+  PREINIT:
+    struct sockaddr_in t_addr = {0};
+    int i_len;
+  CODE:
+    getsockname( i_sd, &t_addr, &i_len );
+    RETVAL = i_len;
+
+    sz_ip = (char*)(inet_ntoa(t_addr.sin_addr));
+
+
+    if( RETVAL < 0 )
+    {
+      printf("After getsockname errno: %d\n", errno);
+      perror("Description: ");
+    }
+  OUTPUT:
+    sz_ip
+    RETVAL
+
+#\End Subroutine    : _getsockname
 ##-----------------------------------------------------------------------------
 
 
@@ -895,7 +956,7 @@ _sctp_getpaddrs(i_sd, i_id, av_sz_ip,av_i_port, av_b_inet6)
       av_push(array_inet6, temp_family);
       ++i;
     }
-    sctp_freepaddrs(t_addrs);
+    sctp_freepaddrs((struct sockaddr *)&t_addrs);
     if( RETVAL < 0 )
     {
       printf("After getpaddrs errno: %d\n", errno);
@@ -950,7 +1011,7 @@ _sctp_getladdrs(i_sd, i_id, av_sz_ip, av_i_port, av_b_inet6)
       av_push(array_inet6, temp_family);
       ++i;
     }
-    sctp_freeladdrs(t_addrs);
+    sctp_freeladdrs((struct sockaddr *)&t_addrs);
 
     if( RETVAL < 0 )
     {

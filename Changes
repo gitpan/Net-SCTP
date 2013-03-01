@@ -1,5 +1,13 @@
 Revision history for Perl extension Net::SCTP.
 
+1.01  Fri Mar 01 2013
+    - Implemented getsockname
+    - Implemented getpeername
+    - Updated Manpage
+    - Implemented shutdown()
+    - Allowed passing in of association id in connectx
+    - Fixed a bug with getladderrs and getpadders
+
 1.00  Thu Feb 28 2013
 	- Original release version
 	- sctp_send(), sctp_sendx(), sctp_sendv(), sctp_recvv() unsupported

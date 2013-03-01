@@ -26,7 +26,7 @@ my $port    = 5556;
 my $message = 'I am the Server!!';
 my $listen  = 1;
 my $many    = 1;
-my $single_host = "192.168.25.41";
+my $single_host = "127.0.0.1";
 
 ################################################################################
 # Variables that are declared here will be used and defined later.
